@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 import sys
 import os
 sys.path.append(os.path.expanduser('~/Desktop/ITMO_ICT_WebDevelopment_tools_2023-2024/students/k33421/aleksei_bezgin/lab1/hack_lab/app/db'))
+sys.path.append(os.path.expanduser('~/Desktop/ITMO_ICT_WebDevelopment_tools_2023-2024/students/k33421/aleksei_bezgin/lab1/hack_lab/app'))
 
 from connection import engine
 from models import Hackathon, Task
