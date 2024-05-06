@@ -1,6 +1,7 @@
 from sqlmodel import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.config import settings
+from config import settings
 
 
 DATABASE_DSN = (
@@ -10,3 +11,4 @@ DATABASE_DSN = (
 
 
 engine = create_engine(DATABASE_DSN, echo=True)
+async_engine = create_async_engine(DATABASE_DSN)

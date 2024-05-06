@@ -5,14 +5,14 @@ import time
 
 import aiohttp
 from bs4 import BeautifulSoup
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import sys
 import os
 sys.path.append(os.path.expanduser('~/Desktop/ITMO_ICT_WebDevelopment_tools_2023-2024/students/k33421/aleksei_bezgin/lab1/hack_lab/app/db'))
 sys.path.append(os.path.expanduser('~/Desktop/ITMO_ICT_WebDevelopment_tools_2023-2024/students/k33421/aleksei_bezgin/lab1/hack_lab/app'))
 
-from connection import engine
+from connection import async_engine
 from models import Hackathon, Task
 
 
@@ -26,7 +26,7 @@ async def add_hackathon(hack_info):
             hack_case = '\n'.join(paragraphs)
             case_title = paragraphs[0]
 
-    async with Session(engine) as session:
+    async with AsyncSession(async_engine) as session:
         hackathon = Hackathon(
             name=hack_name,
             start_date=datetime.datetime.now(),
