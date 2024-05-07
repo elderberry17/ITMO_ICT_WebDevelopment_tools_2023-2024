@@ -1,6 +1,6 @@
 # Task2
 
-|                 | mean time +- std (sec) |
+| approach        | mean time +- std (sec) |
 |-----------------|------------------------|
 | naive           | 20.01 +- 1.25          |
 | threading       | 5.11 +- 0.95           |

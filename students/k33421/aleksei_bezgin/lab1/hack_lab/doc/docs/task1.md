@@ -1,6 +1,6 @@
 # Первое задание
 
-|                 | mean time +- std (sec) |
+| approach        | mean time +- std (sec) |
 |-----------------|----------------------|
 | naive           | 1.33 +- 0.02         |
 | threading       | 1.37 +- 0.03         |
