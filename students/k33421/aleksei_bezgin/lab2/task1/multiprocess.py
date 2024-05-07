@@ -20,5 +20,5 @@ def main(num_of_tasks=5, step=1000000):
 
 if __name__ == "__main__":
     num_of_tasks = 10
-    step = 1000000
+    step = 10000000
     main(num_of_tasks, step)
