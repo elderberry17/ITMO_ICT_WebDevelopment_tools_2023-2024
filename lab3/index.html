@@ -9,10 +9,8 @@
       
       
       
-        <link rel="prev" href="../lab2_description/">
+        <link rel="prev" href="../task2/">
       
-      
-        <link rel="next" href="../task2/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -20,7 +18,7 @@
     
     
       
-        <title>Lab2_task1 - Hackathon lab</title>
+        <title>Lab3 - Hackathon lab</title>
       
     
     
@@ -62,7 +60,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#_1" class="md-skip">
+        <a href="#docker-fastapi-docker" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +96,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Lab2_task1
+              Lab3
             
           </span>
         </div>
@@ -328,19 +326,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../task1/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -349,7 +338,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -378,10 +366,19 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../lab3/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -390,6 +387,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -427,102 +425,267 @@
                   
 
 
-<h1 id="_1">Первое задание</h1>
-<table>
-<thead>
-<tr>
-<th>approach</th>
-<th>mean time +- std (sec)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>naive</td>
-<td>1.33 +- 0.02</td>
-</tr>
-<tr>
-<td>threading</td>
-<td>1.37 +- 0.03</td>
-</tr>
-<tr>
-<td>multiprocessing</td>
-<td>0.44 +- 0.01</td>
-</tr>
-<tr>
-<td>asyncio</td>
-<td>1.33 +- 0.01</td>
-</tr>
-</tbody>
-</table>
-<p>Тут с заметным успехом всех обыгрывает multiprocessing.
-Threading находится на уровне naive из-за CPU/bound операций и тратами на context switching.
-Причины провала asyncio мне неизвестны.</p>
-<h1 id="_2">Сниппеты кода</h1>
+<h1 id="docker-fastapi-docker">Docker. Упаковка FastAPI приложения в Docker, Работа с источниками данных и Очереди</h1>
 <ol>
-<li>Наивная реализация</li>
+<li>Первым делом напишем Dockerfile для нашего FastAPI приложения, тем самым создав его образ для дальнейшего использования в Docker-compose:</li>
 </ol>
-<pre><code class="language-commandline">def calculate_sum(start, end):
-    start_time = time.time()
-    result = sum(range(start, end))
-    print(f&quot;sum from {start} to {end}: {result}&quot;)
-    print(f&quot;execution time: {round(time.time() - start_time, 5)} seconds&quot;)
+<pre><code class="language-commandline">FROM python:3.11.6-slim-bookworm as base
+
+WORKDIR /app
+COPY requirements.txt /app/
+
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1
+
+FROM base as installer
+
+RUN apt update &amp;&amp; apt install --no-install-recommends -y build-essential libpq-dev
+RUN pip install uv
+RUN uv venv /opt/venv
+ENV PATH=&quot;/opt/venv/bin:$PATH&quot;
+ENV VIRTUAL_ENV=/opt/venv
+RUN uv pip install --no-cache -r requirements.txt
+
+FROM base as runtime
+
+RUN apt update &amp;&amp; \
+    apt install --no-install-recommends -y libpq-dev &amp;&amp; \
+    apt clean &amp;&amp; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=installer /opt/venv /opt/venv
+ENV PATH=&quot;/opt/venv/bin:$PATH&quot;
+
+COPY ./src/ .
+</code></pre>
+<p>В первом блоке мы устанавливаем рабочую директорию app/, копируем requirements.txt и устанавливаем значения переменных окружения
+После этого указываем необходимые для компилирования библиотек пакеты, ставим пакетный менеджер uv, создаем виртуальное окружение и устанавливаем туда зависимости из requirements.txt
+Наконец, устанавливаем пакеты для работы с БД, копируем venv и файлы из директории с приложением</p>
+<ol>
+<li>Теперь создаем первую версию docker-compose.yml, в который поместим стандартный postgres контейнер для БД и контейнер на образе нашего приложения:</li>
+</ol>
+<pre><code class="language-commandline">version: &quot;3.4&quot;
+
+services:
+  db:
+    image: postgres:14.1
+    hostname: ${DB_HOST}
+    container_name: db
+    restart: always
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    env_file:
+      - .env
+
+  rest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rest
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8081
+    restart: always
+    volumes:
+      - ./src/:/app
+    ports:
+      - &quot;8081:8081&quot;
+    env_file:
+      - .env
+    depends_on:
+      - db
+</code></pre>
+<p>Теперь наше приложение способно работать так же, как и раньше, но с помощью Docker</p>
+<ol>
+<li>Теперь интегрируем парсер</li>
+</ol>
+<p>Сначала добавим в docker-compose новые контейнеры: Redis для сохранения результатов выполнения задач и RabbitMQ для брокинга сообщений с Celery:</p>
+<pre><code class="language-commandline">  rabbitmq:
+    image: rabbitmq:3.13.1
+    hostname: ${RABBITMQ__HOST}
+    container_name: rabbitmq
+    restart: always
+
+  redis:
+    image: redis:7.2.4
+    hostname: ${REDIS__HOST}
+    container_name: redis
+    restart: always
+</code></pre>
+<p>В директории с приложением создадим директорию для Celery и создадим там модуль для подключения Celery и задачи для парсинга:</p>
+<pre><code class="language-commandline">import datetime
+
+import requests
+from bs4 import BeautifulSoup
+from celery import Celery
+from sqlmodel import Session
+
+from config import settings
+from db.connection import engine
+from db.models import Hackathon, Task
+
+app = Celery(
+    &quot;celery_app&quot;,
+    result_backend=f&quot;redis://{settings.redis_host}:{settings.redis_port}/0&quot;,
+    broker=f&quot;pyamqp://guest@{settings.rabbitmq_host}:{settings.rabbitmq_port}//&quot;,
+)
+
+
+@app.task
+def parse_hackathon(url):
+    page = requests.get(url)
+    soup = BeautifulSoup(page.text, 'html.parser')
+    hack_name = soup.find(&quot;h1&quot;).text
+    paragraphs = list(map(lambda x: x.text, soup.find_all('p')))
+    hack_case = '\n'.join(paragraphs)
+    case_title = paragraphs[0]
+
+    with Session(engine) as session:
+        hackathon = Hackathon(
+            name=hack_name,
+            start_date=datetime.datetime.now(),
+            end_date=datetime.datetime.now() + datetime.timedelta(days=7)
+        )
+
+        session.add(hackathon)
+        session.commit()
+        session.refresh(hackathon)
+
+        task = Task(
+            title=case_title,
+            description=hack_case,
+            requirements=&quot;Be cool&quot;,
+            evaluation_criteria=&quot;Accuracy&quot;,
+            hackathon_id=hackathon.id
+        )
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+
+        print(hackathon.name)
+
+        return {&quot;hackathon&quot;: hackathon.model_dump(), &quot;task&quot;: task.model_dump()}
+</code></pre>
+<p>Теперь добавим контейнер для Celery:</p>
+<pre><code class="language-commandline">  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery
+    command: python -m celery -A celery_worker.app worker
+    restart: always
+    volumes:
+      - ./src/:/app
+    env_file:
+      - .env
+    depends_on:
+      - rest
+      - redis
+      - rabbitmq
 </code></pre>
 <ol>
-<li>multithreading</li>
+<li>Наконец, добавим новые эндпоинты в приложение:</li>
 </ol>
-<pre><code class="language-commandline">def calculate_sum(start, end):
-    result = sum(range(start, end))
-    print(f&quot;sum from {start} to {end}: {result}&quot;)
+<pre><code class="language-commandline">from fastapi import APIRouter
+from celery import current_app as celery_app
 
-def main(num_of_tasks=5, step=1000000):
-    start_time = time.time()
-    threads = []
-    for i in range(num_of_tasks):
-        t = threading.Thread(target=calculate_sum, args=(i*step+1, (i+1)*step))
-        threads.append(t)
-        t.start()
+from celery_worker.app import parse_hackathon
+from rest.celery_tasks.schemas import TaskIdResponse, TaskStatusResponse, ParsedDataResponse
 
-    for t in threads:
-        t.join()
+router = APIRouter()
 
-    print(f&quot;execution time: {round(time.time() - start_time, 5)} seconds&quot;)
+
+@router.post(&quot;/start_parsing&quot;)
+async def start_parsing(url: str) -&gt; TaskIdResponse:
+    task = parse_hackathon.delay(url)
+    return TaskIdResponse.model_validate({&quot;task_id&quot;: task.id})
+
+
+@router.get(&quot;/check_parsing&quot;)
+async def check_parsing(task_id: str) -&gt; TaskStatusResponse:
+    task = celery_app.AsyncResult(task_id)
+    status = task.status
+
+    return TaskStatusResponse.model_validate({&quot;status&quot;: status})
+
+
+@router.get(&quot;/get_parsing&quot;)
+async def get_parsing(task_id: str) -&gt; ParsedDataResponse:
+    task = celery_app.AsyncResult(task_id)
+    result = task.result
+
+    data = result
+    print(data)
+
+    return ParsedDataResponse.model_validate({&quot;data&quot;: data})
 </code></pre>
-<ol>
-<li>multiprocessing</li>
-</ol>
-<pre><code class="language-commandline">def calculate_sum(start, end):
-    result = sum(range(start, end))
-    print(f&quot;sum from {start} to {end}: {result}&quot;)
+<p>В данном случае api/v1/celery/start_parsing позволяет запустить парсинг данных о хакатоне по url
+В api/v1/celery/check_parsing по task_id можно проверить готовность парсинга
+В api/v1/celery/get_parsing по task_id можно получить итоговый результат (словарь с дампами моделей Hackaton и Task)</p>
+<p>Можно так же использовать исходные get-методы для проверки того, что данные действительно сохранились в БД</p>
+<p>Итоговый docker-compose.yml:</p>
+<pre><code class="language-commandline">version: &quot;3.4&quot;
 
-def main(num_of_tasks=5, step=1000000):
-    start_time = time.time()
-    processes = []
-    for i in range(num_of_tasks):
-        p = multiprocessing.Process(target=calculate_sum, args=(i*step+1, (i+1)*step))
-        processes.append(p)
-        p.start()
+services:
+  db:
+    image: postgres:14.1
+    hostname: ${DB_HOST}
+    container_name: db
+    restart: always
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    env_file:
+      - .env
 
-    for p in processes:
-        p.join()
+  rabbitmq:
+    image: rabbitmq:3.13.1
+    hostname: ${RABBITMQ__HOST}
+    container_name: rabbitmq
+    restart: always
 
-    print(f&quot;execution time: {round(time.time() - start_time, 5)} seconds&quot;)
-</code></pre>
-<ol>
-<li>asyncio</li>
-</ol>
-<pre><code class="language-commandline">async def calculate_sum(start, end):
-    result = sum(range(start, end))
-    print(f&quot;sum from {start} to {end}: {result}&quot;)
+  redis:
+    image: redis:7.2.4
+    hostname: ${REDIS__HOST}
+    container_name: redis
+    restart: always
 
-async def main(num_of_tasks=5, step=1000000):
-    start_time = time.time()
-    tasks = []
-    for i in range(num_of_tasks):
-        task = asyncio.create_task(calculate_sum(i*step+1, (i+1)*step))
-        tasks.append(task)
+  rest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rest
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8081
+    restart: always
+    volumes:
+      - ./src/:/app
+    ports:
+      - &quot;8081:8081&quot;
+    env_file:
+      - .env
+    depends_on:
+      - db
 
-    await asyncio.gather(*tasks)
-    print(f&quot;execution time: {round(time.time() - start_time, 5)} seconds&quot;)
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery
+    command: python -m celery -A celery_worker.app worker
+    restart: always
+    volumes:
+      - ./src/:/app
+    env_file:
+      - .env
+    depends_on:
+      - rest
+      - redis
+      - rabbitmq
 </code></pre>
 
 
