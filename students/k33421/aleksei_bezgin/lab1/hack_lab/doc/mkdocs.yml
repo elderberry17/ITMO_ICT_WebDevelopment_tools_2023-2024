@@ -9,5 +9,7 @@ nav:
   - Lab2_description: lab2_description.md
   - Lab2_task1: task1.md
   - Lab2_task2: task2.md
+  - Lab3: lab3.md
+
 theme:
   name: material
